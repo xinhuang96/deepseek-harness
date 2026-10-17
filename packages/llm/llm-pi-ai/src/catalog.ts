@@ -217,7 +217,16 @@ export function catalogProviderIds(): readonly string[] {
 export function catalogModels(provider: string): Map<string, Model<Api>> {
   if (!catalogProviders().has(provider)) return new Map()
   const models = getBuiltinModels(provider as BuiltinProvider) as Model<Api>[]
-  return new Map(models.map(model => [model.id, model]))
+  const catalog = new Map(models.map(model => [model.id, model]))
+  if (provider === 'github-copilot') {
+    if (!catalog.has('claude-haiku-5.5')) {
+      const opus = catalog.get('claude-opus-5.5')
+      if (opus !== undefined) {
+        catalog.set('claude-haiku-5.5', { ...opus, id: 'claude-haiku-5.5', name: 'Claude Haiku 5.5' })
+      }
+    }
+  }
+  return catalog
 }
 
 /**

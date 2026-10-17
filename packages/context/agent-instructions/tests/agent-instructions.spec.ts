@@ -3797,6 +3797,67 @@ describe('dynamic nested workspace context injection', () => {
     }
   })
 
+  it.each(['view', 'apply_patch'])('records nested instructions after a successful %s result', async (name) => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
+    try {
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'baseline root rule')
+      for (const directory of ['pkg', 'added', 'deleted', 'moved', 'spoofed']) {
+        await write(join(root, directory, 'AGENTS.md'), `${directory} instruction`)
+      }
+      pinHarnessHome(home)
+      await mountAgentInstructions(ctx, { maxBytes: 65536 })
+      const agent = await stubAgent(root)
+      await composeBaselinePrefix(ctx, agent)
+      const input = [
+        '*** Begin Patch',
+        '*** Update File: pkg/deep/file.txt',
+        '*** Move to: moved/file.txt',
+        '@@',
+        '-old',
+        '+new',
+        '+*** Add File: spoofed/file.txt',
+        '*** Add File: added/file.txt',
+        '+hello',
+        '*** Delete File: deleted/file.txt',
+        '*** Update File: pkg/other.txt',
+        '@@',
+        '-old',
+        '+new',
+        '*** End Patch',
+      ].join('\r\n')
+
+      ctx.emit('tools/result', stubToolExecution({
+        signal: testToolSignal,
+        callId: ToolCallId(`nested-${name}`),
+        name,
+        arguments: name === 'view' ? { path: join(root, 'pkg/deep/file.txt') } : { input },
+        agent,
+      }), { content: [{ type: 'text', text: 'ok' }], isError: false, value: null })
+      await syncAgentInstructions(ctx, agent)
+      expect(agent.inbox.nextStep).toHaveLength(1)
+      await appendAdditionalContexts(ctx, agent)
+
+      const messages = agent.session.deriveMessages()
+      const text = messages.map(message => blocksText(message.content)).join('\n')
+      const directories = name === 'view' ? ['pkg'] : ['pkg', 'added', 'deleted', 'moved']
+      for (const directory of directories) {
+        expect(text).toContain(`Additional instructions from: ${join(directory, 'AGENTS.md')}`)
+        expect(text.match(new RegExp(`${directory} instruction`, 'g'))).toHaveLength(1)
+      }
+      expect(text).not.toContain('spoofed instruction')
+      if (name === 'view') expect(text).not.toContain('added instruction')
+    } finally {
+      vi.unstubAllEnvs()
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('finishes a committed file-result projection after the tool signal ends', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
@@ -5458,6 +5519,30 @@ describe('dynamic nested workspace context injection', () => {
         signal: testToolSignal,
         callId: ToolCallId('non-fs'), name: 'composite', arguments: {}, agent,
       }), plainResult)
+      for (const [name, args] of [
+        ['view', {}],
+        ['view', { path: 1 }],
+        ['view', { path: ' ' }],
+        ['apply_patch', {}],
+        ['apply_patch', { input: 1 }],
+        ['apply_patch', { input: '*** Add File:  ' }],
+        ['apply_patch', { input: '+*** Add File: spoofed/file.txt' }],
+      ] as const) {
+        ctx.emit('tools/result', stubToolExecution({
+          signal: testToolSignal, callId: ToolCallId(`invalid-${name}`), name, arguments: args, agent,
+        }), plainResult)
+      }
+      for (const [name, args] of [
+        ['view', { path: '/pkg/file.txt' }],
+        ['apply_patch', { input: '*** Begin Patch\n*** Add File: pkg/file.txt\n+hello\n*** End Patch' }],
+      ] as const) {
+        ctx.emit('tools/result', stubToolExecution({
+          signal: testToolSignal, callId: ToolCallId(`failed-${name}`), name, arguments: args, agent,
+        }), { content: [], isError: true, error: { message: 'failed' } })
+        ctx.emit('tools/result', stubToolExecution({
+          signal: aborted.signal, callId: ToolCallId(`aborted-${name}`), name, arguments: args, agent,
+        }), plainResult)
+      }
 
       await Promise.resolve()
       expect(fs.signals).toEqual([])

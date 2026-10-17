@@ -75,12 +75,24 @@ function sameContextPayload(left: UserMessage, right: UserMessage): boolean {
 
 const FILE_TOUCH_TOOL_NAMES = new Set(['read', 'write', 'edit'])
 
-function filePathFromExecution(exec: ToolExecution): string | undefined {
-  if (!FILE_TOUCH_TOOL_NAMES.has(exec.name)) return undefined
-  if (typeof exec.arguments !== 'object' || exec.arguments === null) return undefined
-  if (!('file_path' in exec.arguments) || typeof exec.arguments.file_path !== 'string') return undefined
-  const filePath = exec.arguments.file_path.trim()
-  return filePath.length > 0 ? filePath : undefined
+function filePathsFromExecution(exec: ToolExecution): string[] {
+  if (typeof exec.arguments !== 'object' || exec.arguments === null) return []
+  if (exec.name === 'apply_patch') {
+    if (!('input' in exec.arguments) || typeof exec.arguments.input !== 'string') return []
+    return [...new Set(Array.from(
+      exec.arguments.input.matchAll(/^\*\*\* (?:Add File|Update File|Delete File|Move to): .+$/gm),
+      match => match[0].slice(match[0].indexOf(':') + 1).trim(),
+    ).filter(path => path.length > 0))]
+  }
+  if (exec.name === 'view') {
+    if (!('path' in exec.arguments) || typeof exec.arguments.path !== 'string') return []
+    const path = exec.arguments.path.trim()
+    return path.length > 0 ? [path] : []
+  }
+  if (!FILE_TOUCH_TOOL_NAMES.has(exec.name)) return []
+  if (!('file_path' in exec.arguments) || typeof exec.arguments.file_path !== 'string') return []
+  const path = exec.arguments.file_path.trim()
+  return path.length > 0 ? [path] : []
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -363,8 +375,7 @@ export function apply(ctx: Context, config: Config): void {
     const touches = executionTouches.get(exec.token) ?? []
     executionTouches.delete(exec.token)
     if (!result.isError && exec.agent !== undefined && !exec.signal.aborted) {
-      const ownPath = filePathFromExecution(exec)
-      if (ownPath !== undefined) touches.push({ agent: exec.agent, path: ownPath })
+      for (const path of filePathsFromExecution(exec)) touches.push({ agent: exec.agent, path })
     }
     if (exec.parent !== undefined) {
       if (touches.length > 0) {
