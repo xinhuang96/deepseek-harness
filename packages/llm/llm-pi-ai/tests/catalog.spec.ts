@@ -493,6 +493,17 @@ describe('catalog routes with per-model configuration', () => {
       .toEqual(getBuiltinModels('deepseek').map(model => model.id).sort())
   })
 
+  it.each([
+    ['gpt-6.2-astra', 'GPT-6.2 Astra'],
+    ['gpt-6.2-sol', 'GPT-6.2 Sol'],
+  ])('offers Copilot %s with GPT-6.1 Sol metadata', (id, name) => {
+    const models = resolveProfiles({ 'github-copilot': {} }).get('github-copilot')!.piProvider!.getModels()
+    const base = getBuiltinModels('github-copilot').find(model => model.id === 'gpt-6.1-sol')
+
+    expect(base).toBeDefined()
+    expect(models.find(model => model.id === id)).toEqual({ ...base, id, name })
+  })
+
   it('overrides one catalog model field and defaults the rest from the catalog', async () => {
     const server = await mockServer([])
     const [catalogModel] = getBuiltinModels('deepseek')

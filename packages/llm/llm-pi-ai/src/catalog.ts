@@ -217,7 +217,19 @@ export function catalogProviderIds(): readonly string[] {
 export function catalogModels(provider: string): Map<string, Model<Api>> {
   if (!catalogProviders().has(provider)) return new Map()
   const models = getBuiltinModels(provider as BuiltinProvider) as Model<Api>[]
-  return new Map(models.map(model => [model.id, model]))
+  const catalog = new Map(models.map(model => [model.id, model]))
+  if (provider === 'github-copilot') {
+    const sol = catalog.get('gpt-6.1-sol')
+    if (sol !== undefined) {
+      for (const [id, name] of [
+        ['gpt-6.2-astra', 'GPT-6.2 Astra'],
+        ['gpt-6.2-sol', 'GPT-6.2 Sol'],
+      ] as const) {
+        if (!catalog.has(id)) catalog.set(id, { ...sol, id, name })
+      }
+    }
+  }
+  return catalog
 }
 
 /**
