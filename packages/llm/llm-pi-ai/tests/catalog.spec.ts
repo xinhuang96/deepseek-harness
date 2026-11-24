@@ -493,6 +493,33 @@ describe('catalog routes with per-model configuration', () => {
       .toEqual(getBuiltinModels('deepseek').map(model => model.id).sort())
   })
 
+  describe.each(['azure', 'github-copilot'] as const)('%s GPT-6.2 catalog', (provider) => {
+    it.each([
+      ['gpt-6.2-astra', 'GPT-6.2 Astra'],
+      ['gpt-6.2-sol', 'GPT-6.2 Sol'],
+    ])('offers %s with the provider’s GPT-6.1 Sol metadata', (id, name) => {
+      const models = resolveProfiles({ [provider]: {} }).get(provider)!.piProvider!.getModels()
+      const base = getBuiltinModels(provider).find(model => model.id === 'gpt-6.1-sol')
+
+      expect(base).toBeDefined()
+      expect(models.find(model => model.id === id)).toEqual({ ...base, id, name })
+    })
+  })
+
+  describe.each(['github-copilot', 'google', 'google-vertex', 'opencode'] as const)('%s Gemini 4 catalog', (provider) => {
+    it.each([
+      ['gemini-4-carbon', 'Gemini 4 Carbon'],
+      ['gemini-4-neon', 'Gemini 4 Neon'],
+      ['gemini-4-hydrogen', 'Gemini 4 Hydrogen'],
+    ])('offers %s with the provider’s Gemini 4 Argon metadata', (id, name) => {
+      const models = resolveProfiles({ [provider]: {} }).get(provider)!.piProvider!.getModels()
+      const base = getBuiltinModels(provider).find(model => model.id === 'gemini-4-argon')
+
+      expect(base).toBeDefined()
+      expect(models.find(model => model.id === id)).toEqual({ ...base, id, name })
+    })
+  })
+
   it('overrides one catalog model field and defaults the rest from the catalog', async () => {
     const server = await mockServer([])
     const [catalogModel] = getBuiltinModels('deepseek')

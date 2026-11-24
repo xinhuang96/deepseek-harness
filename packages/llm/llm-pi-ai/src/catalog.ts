@@ -210,15 +210,41 @@ export function catalogProviderIds(): readonly string[] {
 }
 
 /**
- * The installed catalog models for one route, indexed by model id.
+ * Catalog models for one route, including fallback entries for missing models, indexed by model id.
  * @param provider - provider route key.
  * @returns catalog models by id; empty for a route {@link catalogProvider} does not return.
  */
 export function catalogModels(provider: string): Map<string, Model<Api>> {
   if (!catalogProviders().has(provider)) return new Map()
   const models = getBuiltinModels(provider as BuiltinProvider) as Model<Api>[]
-  return new Map(models.map(model => [model.id, model]))
+  const catalog = new Map(models.map(model => [model.id, model]))
+  for (const { providers, baseId, models: fallbacks } of FALLBACK_MODELS) {
+    if (providers !== undefined && !providers.includes(provider)) continue
+    const base = catalog.get(baseId)
+    if (base === undefined) continue
+    for (const [id, name] of fallbacks) {
+      if (!catalog.has(id)) catalog.set(id, { ...base, id, name })
+    }
+  }
+  return catalog
 }
+
+/** Models copied from a same-provider base when missing; omitted `providers` means every provider listing the base. */
+const FALLBACK_MODELS: readonly {
+  providers?: readonly string[]
+  baseId: string
+  models: readonly (readonly [id: string, name: string])[]
+}[] = [
+  {
+    providers: ['azure', 'github-copilot'],
+    baseId: 'gpt-6.1-sol',
+    models: [['gpt-6.2-astra', 'GPT-6.2 Astra'], ['gpt-6.2-sol', 'GPT-6.2 Sol']],
+  },
+  {
+    baseId: 'gemini-4-argon',
+    models: [['gemini-4-carbon', 'Gemini 4 Carbon'], ['gemini-4-neon', 'Gemini 4 Neon'], ['gemini-4-hydrogen', 'Gemini 4 Hydrogen']],
+  },
+]
 
 /**
  * Selectable reasoning efforts for one model: each key is a level the model

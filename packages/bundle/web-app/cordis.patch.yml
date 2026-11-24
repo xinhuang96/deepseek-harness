@@ -326,6 +326,7 @@
 
     - id: skill-office
       name: '@deepseek-ai/dsh-skill-office'
+      disabled: true
       config:
         pythonEnvironment: !!js "ctx.get('profileContext')?.name === 'desktop' && process.env.DSH_PRIMARY_RUNTIME ? 'workspace-dependencies' : 'user'"
 
